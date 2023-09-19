@@ -44,6 +44,37 @@ class DeepNetwork(nn.Module):
 				x = F.relu(x)
 		return x
 
+class LeNet5(nn.Module):
+	def __init__(self):
+		super().__init__()
+		self.layer1 = nn.Sequential(
+			nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=2),
+			nn.BatchNorm2d(6),
+			nn.ReLU(),
+			nn.MaxPool2d(kernel_size = 2, stride = 2))
+		self.layer2 = nn.Sequential(
+			nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=0),
+			nn.BatchNorm2d(16),
+			nn.ReLU(),
+			nn.MaxPool2d(kernel_size = 2, stride = 2))
+		self.linear1 = nn.Linear(400, 120)
+		nn.init.uniform_(self.linear1.weight, -0.001, 0.001)
+		self.linear2 = nn.Linear(120, 84)
+		nn.init.uniform_(self.linear2.weight, -0.001, 0.001)
+		self.linear3 = nn.Linear(84, 10)
+		nn.init.uniform_(self.linear3.weight, -0.001, 0.001)
+		
+	def forward(self, x):
+		x = x.view(x.size(0),1,28,28)
+		x = self.layer1(x)
+		x = self.layer2(x)
+		x = x.reshape(x.size(0), -1)
+		x = self.linear1(x)
+		x = F.relu(x)
+		x = self.linear2(x)
+		x = F.relu(x)
+		x = self.linear3(x)
+		return x
 
 def train_model(model, verbose=True):
 	start = time()
@@ -69,6 +100,7 @@ def train_model(model, verbose=True):
 	# on initiliase l'optimiseur
 	loss_func = torch.nn.MSELoss(reduction='sum')
 	optim = torch.optim.SGD(model.parameters(), lr=eta)
+	acc = 0.
 
 	if verbose:
 		print(time() - start)
@@ -97,4 +129,4 @@ def train_model(model, verbose=True):
 	return acc/data_test.shape[0]
 
 if __name__ == '__main__':
-	train_model(model=DeepNetwork([100, 1000, 100]))
+	train_model(model=LeNet5())
