@@ -15,7 +15,7 @@ import torch
 from time import time
 
 
-class MyModel(nn.Module):
+class ShallowNetwork(nn.Module):
 	def __init__(self, N) -> None:
 		super().__init__()
 		self.linear1 = nn.Linear(784, N)
