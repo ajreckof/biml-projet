@@ -94,10 +94,7 @@ def train_model(model, verbose=True):
 		# on affiche le pourcentage de bonnes réponses
 		if verbose:
 			print(acc/data_test.shape[0], time() - start)
-	return
-
-
-func
+	return acc/data_test.shape[0]
 
 if __name__ == '__main__':
 	train_model(model=DeepNetwork([100, 1000, 100]))
