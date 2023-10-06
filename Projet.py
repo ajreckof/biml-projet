@@ -143,6 +143,14 @@ def grid_search(Model, possible_number_of_layers, possible_incrementing_factor, 
                         result])
     return results
 
+def grid_search_shallow(Model, possible_neurones_num, possible_learning_rates):
+    results = []
+    grid_parameter = itertools.product(possible_neurones_num, possible_learning_rates)
+    for N, eta in grid_parameter:
+        result = float(train_model(model=Model(N), eta=eta, batch_size=5, nb_epochs=10, verbose=True))
+        print (eta, N, result)
+        results.append([eta,N,result])
+    return results
 
 if __name__ == '__main__':
     results = grid_search(DeepNetwork, [2, 3, 4], [2, 3, 5],
