@@ -15,6 +15,8 @@ import torch
 import itertools
 import csv
 from time import time
+from torch.utils.data import DataLoader, Subset
+from sklearn.model_selection import train_test_split
 
 
 class ShallowNetwork(nn.Module):
@@ -79,31 +81,56 @@ class LeNet5(nn.Module):
         x = self.linear3(x)
         return x
 
+def write_results_to_csv(results, file_name, headers):
+    f = open(file_name, 'w')
 
-def train_model(model, batch_size=5, eta=0.001, nb_epochs=10, verbose=True):
-    start = time()
+    # create the csv writer
+    writer = csv.writer(f)
 
-    # on lit les données
-    ((data_train, label_train), (data_test, label_test)
-     ) = torch.load(gzip.open('mnist.pkl.gz'))
-    # on crée les lecteurs de données
-    train_dataset = torch.utils.data.TensorDataset(
-        data_train, label_train)
-    test_dataset = torch.utils.data.TensorDataset(
-        data_test, label_test)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=1, shuffle=False)
+    # write column names
+    writer.writerow(headers)
 
-    # on initialise le modèle et ses poids
+    # write data to the csv file
+    writer.writerows(results)
 
-    # on initiliase l'optimiseur
+    # close the file
+    f.close()
+
+def generate_split(train_dataset, labels):
+
+    # on génère des indices pour le set de validation et d'entrainement 
+    train_indices, val_indices, _, _ = train_test_split(
+        range(len(labels)),
+        labels,
+        stratify=labels,
+        test_size=0.1,
+    )
+
+    # on génère les sous set à partir des indices
+    train_split = Subset(train_dataset, train_indices)
+    val_split = Subset(train_dataset, val_indices)
+
+    return train_split, val_split
+
+def test_model(model, test_loader):
+    # test du modèle (on évalue la progression pendant l'apprentissage)
+    acc = 0.
+    # on lit toutes les données de test
+    for x, t in test_loader:
+        # on calcule la sortie du modèle
+        y = model(x)
+        # on regarde si la sortie est correcte
+        acc += sum(torch.argmax(y, 1) == torch.argmax(t, 1))
+    return float(acc/len(test_loader.dataset))
+
+def train_model(model, train_loader, test_loader, eta=0.001, nb_epochs=10, verbose=True):
+    
+    # on initialise l'optimiseur
     loss_func = torch.nn.MSELoss(reduction='sum')
     optim = torch.optim.SGD(model.parameters(), lr=eta)
+
     acc = 0.
-    if verbose:
-        print(time() - start)
+    start = time()
     for n in range(nb_epochs):
         # on lit toutes les données d'apprentissage
         for x, t in train_loader:
@@ -114,58 +141,172 @@ def train_model(model, batch_size=5, eta=0.001, nb_epochs=10, verbose=True):
             loss.backward()
             optim.step()
             optim.zero_grad()
-
-        # test du modèle (on évalue la progression pendant l'apprentissage)
-        acc = 0.
-        # on lit toutes les donnéees de test
-        for x, t in test_loader:
-            # on calcule la sortie du modèle
-            y = model(x)
-            # on regarde si la sortie est correcte
-            acc += torch.argmax(y, 1) == torch.argmax(t, 1)
-        # on affiche le pourcentage de bonnes réponses
         if verbose:
-            print(acc/data_test.shape[0], time() - start)
-    return acc/data_test.shape[0]
+            acc = test_model(model, test_loader)
+            print(acc, time() - start)
+    learning_time = time() - start
+
+    if not verbose :
+        acc = test_model(model, test_loader)
+
+    return model, acc, learning_time
 
 
-def grid_search(Model, possible_number_of_layers, possible_incrementing_factor, possible_batch_size, possible_learning_rates):
-    results = []
+def grid_search_incrementing_factor(Model, possible_number_of_layers, possible_incrementing_factor, possible_batch_size, possible_learning_rates):
+     # on lit les données
+    ((data_train, label_train), (data_test, label_test)) = torch.load(gzip.open('mnist.pkl.gz'))
+
+    # on crée les lecteurs de données
+    train_dataset = torch.utils.data.TensorDataset(data_train, label_train)
+
+    # on génère un set de validation
+    train_split, val_split = generate_split(train_dataset, label_train)
+
 
     grid_parameter = itertools.product(
-        possible_batch_size, possible_learning_rates, possible_number_of_layers, possible_incrementing_factor)
+        possible_batch_size, 
+        possible_learning_rates, 
+        possible_number_of_layers, 
+        possible_incrementing_factor
+    )
+
+    results = []
+    best_model = None
+    best_accuracy = 0
+
     for batch_size, learning_rate, number_of_layers, incrementing_factor in grid_parameter:
-        result = float(train_model(Model([10 * incrementing_factor ** (number_of_layers - i)
-                       for i in range(number_of_layers)]), batch_size, learning_rate, verbose=False))
-        print(batch_size, learning_rate, number_of_layers, incrementing_factor,
-              result)
-        results.append([batch_size, learning_rate, number_of_layers, incrementing_factor,
-                        result])
-    return results
+
+        train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_split, batch_size=batch_size, shuffle=True)
+
+        model, result, time = train_model(
+            Model([10 * incrementing_factor ** (number_of_layers - i) for i in range(number_of_layers)]), 
+            train_loader, 
+            val_loader, 
+            learning_rate, 
+            verbose=False
+        )
+        if result > best_accuracy :
+            best_accuracy = result
+            best_model = model
+
+        print(batch_size, learning_rate, number_of_layers, incrementing_factor, result, time)
+        results.append([batch_size, learning_rate, number_of_layers, incrementing_factor, result, time])
+
+
+    test_dataset = torch.utils.data.TensorDataset(data_test, label_test)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
+
+    return best_model, test_model(best_model, test_loader), results
+
+def grid_search_first_layer_size(Model, possible_number_of_layers, possible_first_layer_size, possible_batch_size, possible_learning_rates):
+     # on lit les données
+    ((data_train, label_train), (data_test, label_test)) = torch.load(gzip.open('mnist.pkl.gz'))
+
+    # on crée les lecteurs de données
+    train_dataset = torch.utils.data.TensorDataset(data_train, label_train)
+
+    # on génère un set de validation
+    train_split, val_split = generate_split(train_dataset, label_train)
+
+
+    grid_parameter = itertools.product(
+        possible_batch_size, 
+        possible_learning_rates, 
+        possible_number_of_layers, 
+        possible_first_layer_size
+    )
+
+    results = []
+    best_model = None
+    best_accuracy = 0
+
+    for batch_size, learning_rate, number_of_layers, first_layer_size in grid_parameter:
+
+        train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_split, batch_size=batch_size, shuffle=True)
+
+        model, result, time = train_model(
+            Model([int(first_layer_size * (10/first_layer_size) ** (i/number_of_layers)) for i in range(number_of_layers)]), 
+            train_loader, 
+            val_loader,           
+            learning_rate, 
+            verbose=False
+        )
+
+        if result > best_accuracy :
+            best_accuracy = result
+            best_model = model
+
+        print(batch_size, learning_rate, number_of_layers, first_layer_size, result, time)
+        results.append([batch_size, learning_rate, number_of_layers, first_layer_size, result, time])
+    
+    test_dataset = torch.utils.data.TensorDataset(data_test, label_test)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
+
+    return best_model, test_model(best_model, test_loader), results
 
 def grid_search_shallow(Model, possible_neurones_num, possible_learning_rates):
-    results = []
+     # on lit les données
+    ((data_train, label_train), (data_test, label_test)) = torch.load(gzip.open('mnist.pkl.gz'))
+
+    # on crée les lecteurs de données
+    train_dataset = torch.utils.data.TensorDataset(data_train, label_train)
+
+    # on génère un set de validation
+    train_split, val_split = generate_split(train_dataset, label_train)
+
+    #on génère les loader pour les set d'entrainement et de validation
+    train_loader = DataLoader(train_split, batch_size=5, shuffle=True)
+    val_loader = DataLoader(val_split, batch_size=5, shuffle=True)
+    
     grid_parameter = itertools.product(possible_neurones_num, possible_learning_rates)
+
+    results = []
+    best_model = None
+    best_accuracy = 0
+
     for N, eta in grid_parameter:
-        result = float(train_model(model=Model(N), eta=eta, batch_size=5, nb_epochs=10, verbose=True))
-        print (eta, N, result)
-        results.append([eta,N,result])
-    return results
+        model, result, time = train_model(
+            Model(N),
+            train_loader,
+            val_loader, 
+            eta,
+            verbose=True)
+
+        if result > best_accuracy :
+            best_accuracy = result
+            best_model = model
+        
+        print(eta, N, result, time)
+        results.append([eta, N, result, time])
+    return best_model, test_model(best_model, test_loader), results
 
 if __name__ == '__main__':
-    results = grid_search(DeepNetwork, [2, 3, 4], [2, 3, 5],
-                          [5, 10, 15], [10**-2, 10**-3, 10**-4])
-    f = open('./results2.csv', 'w')
+    _, accuracy, results = grid_search_incrementing_factor(
+        DeepNetwork, 
+        [2, 3, 4], 
+        [2,3,5],
+        [5, 20, 50], 
+        [10**-2, 10**-3, 10**-4]
+    )
+    print(accuracy)
+    write_results_to_csv(
+        results,
+        "results_deep_incrementing_factor.csv",
+        ["batch_size", "learning_rate", "number_of_layers", "incrementing_factor", "résultat", "temps"],
+    )
 
-    # create the csv writer
-    writer = csv.writer(f)
-
-    # write column names
-    writer.writerow(["batch_size", "learning_rate", "number_of_layers", "incrementing_factor",
-                     "result"])
-
-    # write data to the csv file
-    writer.writerows(results)
-
-    # close the file
-    f.close()
+    _, accuracy, results = grid_search_first_layer_size(
+        DeepNetwork, 
+        [2, 3, 4], 
+        [100,200,500,1000],
+        [5, 20, 50], 
+        [10**-2, 10**-3, 10**-4]
+    )
+    print(accuracy)
+    write_results_to_csv(
+        results,
+        "results_deep_first_layer_size.csv",
+        ["batch_size", "learning_rate", "number_of_layers", "first_layer_size", "résultat", "temps"],
+    )
