@@ -177,7 +177,7 @@ def grid_search_incrementing_factor(Model, possible_number_of_layers, possible_i
     for batch_size, learning_rate, number_of_layers, incrementing_factor in grid_parameter:
 
         train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_split, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_split, batch_size=len(val_split), shuffle=True)
 
         model, result, time = train_model(
             Model([10 * incrementing_factor ** (number_of_layers - i) for i in range(number_of_layers)]), 
@@ -224,7 +224,7 @@ def grid_search_first_layer_size(Model, possible_number_of_layers, possible_firs
     for batch_size, learning_rate, number_of_layers, first_layer_size in grid_parameter:
 
         train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_split, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_split, batch_size=len(val_split), shuffle=True)
 
         model, result, time = train_model(
             Model([int(first_layer_size * (10/first_layer_size) ** (i/number_of_layers)) for i in range(number_of_layers)]), 
@@ -258,7 +258,7 @@ def grid_search_shallow(Model, possible_neurones_num, possible_learning_rates):
 
     #on génère les loader pour les set d'entrainement et de validation
     train_loader = DataLoader(train_split, batch_size=5, shuffle=True)
-    val_loader = DataLoader(val_split, batch_size=5, shuffle=True)
+    val_loader = DataLoader(val_split, batch_size=len(val_split), shuffle=True)
     
     grid_parameter = itertools.product(possible_neurones_num, possible_learning_rates)
 
