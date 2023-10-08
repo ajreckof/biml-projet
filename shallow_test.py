@@ -6,5 +6,5 @@ if __name__ == '__main__':
     write_results_to_csv(
         results,
         "results_shallow.csv",
-        ["learning_rate", "number_of_neurones", "result"],
+        ["learning_rate", "number_of_neurones", "result", "time"],
     )

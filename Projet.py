@@ -280,6 +280,10 @@ def grid_search_shallow(Model, possible_neurones_num, possible_learning_rates):
         
         print(eta, N, result, time)
         results.append([eta, N, result, time])
+        
+    test_dataset = torch.utils.data.TensorDataset(data_test, label_test)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
+    
     return best_model, test_model(best_model, test_loader), results
 
 if __name__ == '__main__':
